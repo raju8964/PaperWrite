@@ -1,0 +1,390 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaperWrite — Document Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<style>
+:root{--blue:#2563eb;--dark:#172033;--muted:#64748b;--line:#e2e8f0}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Arial,sans-serif;color:var(--dark);background:#f5f7fb}
+header{height:68px;background:white;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;gap:12px}
+.logo{font-size:23px;font-weight:800;color:var(--blue)}.logo span{color:var(--dark)}
+button,.upload-label{border:0;border-radius:9px;padding:11px 15px;cursor:pointer;font-weight:600;font-size:13px}
+.primary{background:var(--blue);color:white}.secondary{background:white;border:1px solid var(--line);color:var(--dark)}
+main{max-width:1200px;margin:28px auto;padding:0 18px}
+.intro h1{font-size:30px;margin:0 0 8px}.intro p{color:var(--muted);margin:0 0 22px}
+.workspace{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px}
+.panel,.editor{background:white;border:1px solid var(--line);border-radius:15px;padding:18px}
+.panel h3{font-size:15px;margin:0 0 16px}
+.tool{width:100%;text-align:left;background:#f8fafc;margin-bottom:9px;border:1px solid var(--line)}
+.tool:hover{border-color:#93b4ff;background:#eff6ff}
+.field{margin:15px 0}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:7px}
+input[type="text"],input[type="number"],select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:white}
+input[type="color"]{width:100%;height:36px;border:0;background:white}
+.editor{min-width:0;padding:14px}
+.editor-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.canvas-wrap{min-height:400px;background:#eef2f7;border-radius:10px;padding:15px;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
+canvas{max-width:100%;height:auto}
+#placeholder{text-align:center;color:var(--muted);padding:100px 10px}
+#placeholder .big{font-size:46px;margin-bottom:14px}
+#pages{display:flex;align-items:center;gap:10px;font-size:13px}
+.hint{font-size:12px;color:var(--muted);line-height:1.6;margin-top:14px}
+#fileInput{display:none}
+.status{font-size:12px;color:var(--muted);margin-top:12px;min-height:18px}
+footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
+@media(max-width:720px){header{padding:0 13px}.logo{font-size:19px}main{margin-top:20px}.intro h1{font-size:25px}.workspace{grid-template-columns:1fr}.panel{order:2}.editor{order:1}.canvas-wrap{padding:8px;min-height:280px}#placeholder{padding:65px 10px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Paper<span>Write</span> ✍️</div>
+  <button class="primary" onclick="document.getElementById('fileInput').click()">＋ Upload Document</button>
+  <input id="fileInput" type="file" accept=".pdf,image/png,image/jpeg,image/webp">
+</header>
+
+<main>
+  <section class="intro">
+    <h1>Your documents, your handwriting.</h1>
+    <p>Upload a PDF or image, add text anywhere, and download your edited document.</p>
+  </section>
+
+  <div class="workspace">
+    <aside class="panel">
+      <h3>Editing Tools</h3>
+      <button class="tool" onclick="addText()">＋ Add Text</button>
+      <button class="tool" onclick="rotateText()">↻ Rotate Selected Text</button>
+      <button class="tool" onclick="deleteText()">✕ Delete Selected Text</button>
+      <div class="field">
+        <label for="textValue">Edit selected text</label>
+        <input id="textValue" type="text" placeholder="Select a text box first">
+      </div>
+      <div class="field">
+        <label for="fontFamily">Font style</label>
+        <select id="fontFamily">
+          <option value="Arial">Normal — Arial</option>
+          <option value="Georgia">Serif — Georgia</option>
+          <option value="Comic Sans MS">Handwriting-style — Comic Sans</option>
+          <option value="Brush Script MT">Script — Brush Script*</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fontSize">Font size</label>
+        <input id="fontSize" type="number" min="8" max="120" value="24">
+      </div>
+      <div class="field">
+        <label for="fontColor">Text color</label>
+        <input id="fontColor" type="color" value="#202020">
+      </div>
+      <button class="secondary" style="width:100%" onclick="applyStyle()">Apply Text Style</button>
+      <p class="hint">Tip: Select a text box to move it. Drag its corners to resize and use the rotation handle to rotate it.</p>
+    </aside>
+
+    <section class="editor">
+      <div class="editor-top">
+        <strong>Document Preview</strong>
+        <div id="pages">
+          <button class="secondary" onclick="changePage(-1)">←</button>
+          <span id="pageLabel">Page 0 / 0</span>
+          <button class="secondary" onclick="changePage(1)">→</button>
+        </div>
+        <button class="primary" onclick="exportPDF()">↓ Export PDF</button>
+      </div>
+      <div class="canvas-wrap">
+        <div id="placeholder">
+          <div class="big">📄</div>
+          <strong>Upload your document to get started</strong>
+          <p>PDF, PNG, JPG or WEBP</p>
+          <button class="primary" onclick="document.getElementById('fileInput').click()">Choose a file</button>
+        </div>
+        <canvas id="pdfCanvas" style="display:none"></canvas>
+      </div>
+      <div class="status" id="status">Ready to edit.</div>
+    </section>
+  </div>
+</main>
+<footer>PaperWrite · Your documents stay in your browser during editing.</footer>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const canvas = new fabric.Canvas("pdfCanvas", {
+  preserveObjectStacking: true,
+  selection: true
+});
+const fileInput = document.getElementById("fileInput");
+const statusBox = document.getElementById("status");
+const placeholder = document.getElementById("placeholder");
+let originalPdfBytes = null;
+let pdfDoc = null;
+let currentPage = 1;
+let totalPages = 0;
+let baseWidth = 595;
+let baseHeight = 842;
+let sourceType = "";
+let sourceImage = null;
+let pageObjects = {};
+let busy = false;
+
+function status(message) {
+  statusBox.textContent = message;
+}
+function savePage() {
+  if (totalPages) {
+    pageObjects[currentPage] = canvas.getObjects().filter(o => !o.isBackground).map(o => o.toObject(["isBackground"]));
+  }
+}
+function clearEditor() {
+  canvas.clear();
+  canvas.backgroundColor = "#ffffff";
+  canvas.setWidth(595);
+  canvas.setHeight(842);
+  canvas.renderAll();
+}
+function addText() {
+  if (!sourceType) {
+    status("Please upload a PDF or image first.");
+    return;
+  }
+  const obj = new fabric.Textbox("Write your text here", {
+    left: 45, top: 55, width: 260, fontSize: 24,
+    fill: document.getElementById("fontColor").value,
+    fontFamily: document.getElementById("fontFamily").value,
+    editable: true, padding: 4, cornerColor: "#2563eb",
+    borderColor: "#2563eb", transparentCorners: false
+  });
+  canvas.add(obj);
+  canvas.setActiveObject(obj);
+  canvas.renderAll();
+  status("Text added. Move, resize or rotate it.");
+}
+function rotateText() {
+  const o = canvas.getActiveObject();
+  if (!o) return status("Select a text box first.");
+  o.rotate(((o.angle || 0) + 15) % 360);
+  canvas.renderAll();
+}
+function deleteText() {
+  const o = canvas.getActiveObject();
+  if (!o) return status("Select an object first.");
+  if (o.isBackground) return status("The document background cannot be deleted.");
+  canvas.remove(o);
+  canvas.renderAll();
+  savePage();
+}
+function applyStyle() {
+  const o = canvas.getActiveObject();
+  if (!o || !("text" in o)) return status("Select a text box first.");
+  const size = Number(document.getElementById("fontSize").value);
+  if (size < 8 || size > 120) return status("Font size must be 8–120.");
+  o.set({
+    fontFamily: document.getElementById("fontFamily").value,
+    fontSize: size,
+    fill: document.getElementById("fontColor").value
+  });
+  canvas.renderAll();
+  savePage();
+  status("Text style updated.");
+}
+document.getElementById("textValue").addEventListener("input", e => {
+  const o = canvas.getActiveObject();
+  if (o && "text" in o) {
+    o.set("text", e.target.value);
+    canvas.renderAll();
+    savePage();
+  }
+});
+canvas.on("selection:created", syncFields);
+canvas.on("selection:updated", syncFields);
+canvas.on("object:modified", savePage);
+canvas.on("text:changed", savePage);
+function syncFields() {
+  const o = canvas.getActiveObject();
+  if (!o || !("text" in o)) return;
+  document.getElementById("textValue").value = o.text || "";
+  document.getElementById("fontSize").value = o.fontSize || 24;
+  document.getElementById("fontColor").value = typeof o.fill === "string" && o.fill.startsWith("#") ? o.fill : "#202020";
+  document.getElementById("fontFamily").value = o.fontFamily || "Arial";
+}
+async function loadPdfPage(n, restore = true) {
+  if (!pdfDoc || n < 1 || n > totalPages || busy) return;
+  busy = true;
+  savePage();
+  currentPage = n;
+  try {
+    const page = await pdfDoc.getPage(n);
+    const viewport = page.getViewport({scale: 1.35});
+    const el = document.getElementById("pdfCanvas");
+    el.width = Math.round(viewport.width);
+    el.height = Math.round(viewport.height);
+    await page.render({canvasContext: el.getContext("2d"), viewport}).promise;
+    baseWidth = viewport.width;
+    baseHeight = viewport.height;
+    const data = el.toDataURL("image/png");
+    clearEditor();
+    canvas.setWidth(baseWidth);
+    canvas.setHeight(baseHeight);
+    await new Promise(resolve => fabric.Image.fromURL(data, img => {
+      img.set({left:0,top:0,selectable:false,evented:false,isBackground:true});
+      img.scaleToWidth(baseWidth);
+      img.scaleToHeight(baseHeight);
+      canvas.add(img);
+      canvas.sendToBack(img);
+      resolve();
+    }));
+    if (restore && pageObjects[n]) {
+      const objs = await new Promise(resolve => fabric.util.enlivenObjects(pageObjects[n], resolve));
+      objs.forEach(o => canvas.add(o));
+    }
+    canvas.renderAll();
+    placeholder.style.display = "none";
+    el.style.display = "none";
+    document.getElementById("pageLabel").textContent = `Page ${n} / ${totalPages}`;
+    status(`Page ${n} loaded.`);
+  } catch (e) {
+    status("Could not render this PDF page. Please try another PDF.");
+    console.error(e);
+  } finally { busy = false; }
+}
+async function loadImage(file) {
+  sourceImage = await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    fabric.Image.fromURL(url, img => {
+      URL.revokeObjectURL(url);
+      if (!img) reject(new Error("Image could not be loaded"));
+      else resolve(img);
+    });
+  });
+  clearEditor();
+  const scale = Math.min(900/sourceImage.width, 1100/sourceImage.height, 1);
+  baseWidth = Math.round(sourceImage.width * scale);
+  baseHeight = Math.round(sourceImage.height * scale);
+  canvas.setWidth(baseWidth);
+  canvas.setHeight(baseHeight);
+  sourceImage.set({left:0,top:0,selectable:false,evented:false,isBackground:true});
+  sourceImage.scaleX = baseWidth / sourceImage.width;
+  sourceImage.scaleY = baseHeight / sourceImage.height;
+  canvas.add(sourceImage);
+  canvas.sendToBack(sourceImage);
+  canvas.renderAll();
+  placeholder.style.display = "none";
+  document.getElementById("pdfCanvas").style.display = "none";
+  totalPages = 1;
+  currentPage = 1;
+  document.getElementById("pageLabel").textContent = "Page 1 / 1";
+  status("Image loaded successfully.");
+}
+fileInput.addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    status("Loading document...");
+    pageObjects = {};
+    pdfDoc = null;
+    originalPdfBytes = null;
+    sourceImage = null;
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      sourceType = "pdf";
+      originalPdfBytes = new Uint8Array(await file.arrayBuffer());
+      pdfDoc = await pdfjsLib.getDocument({data: originalPdfBytes.slice()}).promise;
+      totalPages = pdfDoc.numPages;
+      currentPage = 1;
+      await loadPdfPage(1, false);
+    } else if (file.type.startsWith("image/")) {
+      sourceType = "image";
+      await loadImage(file);
+    } else {
+      throw new Error("Unsupported file type");
+    }
+  } catch (err) {
+    console.error(err);
+    status("Could not open this file. Try a valid PDF, PNG, JPG or WEBP.");
+  }
+});
+async function changePage(delta) {
+  if (!pdfDoc) return status("Page navigation is available for PDFs.");
+  await loadPdfPage(currentPage + delta);
+}
+async function exportPDF() {
+  if (!sourceType) return status("Upload a document first.");
+  if (busy) return status("Please wait for the page to finish loading.");
+  savePage();
+  try {
+    status("Preparing PDF export...");
+    const out = await PDFLib.PDFDocument.create();
+    let original = null;
+    if (sourceType === "pdf") {
+      original = await PDFLib.PDFDocument.load(originalPdfBytes);
+    }
+    for (let i = 1; i <= totalPages; i++) {
+      let pageWidth, pageHeight, page;
+      if (sourceType === "pdf") {
+        const [copied] = await out.copyPages(original, [i-1]);
+        out.addPage(copied);
+        page = copied;
+        const sz = page.getSize();
+        pageWidth = sz.width;
+        pageHeight = sz.height;
+      } else {
+        pageWidth = sourceImage.width;
+        pageHeight = sourceImage.height;
+        page = out.addPage([pageWidth, pageHeight]);
+      }
+      let objects;
+      if (i === currentPage) {
+        objects = canvas.getObjects().filter(o => !o.isBackground);
+        const png = await new Promise(resolve => resolve(canvas.toDataURL({format:"png",multiplier:1})));
+        // Current page uses the complete canvas overlay below.
+        const pngBytes = await fetch(png).then(r => r.arrayBuffer());
+        const embedded = await out.embedPng(pngBytes);
+        page.drawImage(embedded, {x:0,y:0,width:pageWidth,height:pageHeight});
+        continue;
+      }
+      if (sourceType === "pdf" && pageObjects[i]) {
+        // Other edited pages are rendered by restoring their saved text objects.
+        const pg = await pdfDoc.getPage(i);
+        const viewport = pg.getViewport({scale:1.35});
+        const temp = document.createElement("canvas");
+        temp.width = Math.round(viewport.width);
+        temp.height = Math.round(viewport.height);
+        await pg.render({canvasContext:temp.getContext("2d"),viewport}).promise;
+        const tempCanvas = new fabric.StaticCanvas(null,{width:temp.width,height:temp.height});
+        await new Promise(resolve => fabric.Image.fromURL(temp.toDataURL(),img=>{
+          img.set({left:0,top:0,selectable:false,evented:false,isBackground:true});
+          img.scaleX=temp.width/img.width; img.scaleY=temp.height/img.height;
+          tempCanvas.add(img);
+          fabric.util.enlivenObjects(pageObjects[i],objs=>{
+            objs.forEach(o=>tempCanvas.add(o));
+            tempCanvas.renderAll(); resolve();
+          });
+        }));
+        const bytes = await fetch(tempCanvas.toDataURL({format:"png"})).then(r=>r.arrayBuffer());
+        const embed = await out.embedPng(bytes);
+        page.drawImage(embed,{x:0,y:0,width:pageWidth,height:pageHeight});
+        tempCanvas.dispose();
+      } else if (sourceType === "image" && i === 1) {
+        const pngBytes = await fetch(canvas.toDataURL({format:"png"})).then(r=>r.arrayBuffer());
+        const embedded = await out.embedPng(pngBytes);
+        page.drawImage(embedded,{x:0,y:0,width:pageWidth,height:pageHeight});
+      }
+    }
+    const bytes = await out.save();
+    const blob = new Blob([bytes],{type:"application/pdf"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "paperwrite-edited.pdf"; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    status("PDF downloaded successfully.");
+  } catch(e) {
+    console.error(e);
+    status("Export failed. Please try again with a smaller document.");
+  }
+}
+</script>
+</body>
+</html>
