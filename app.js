@@ -8,6 +8,13 @@ const debounce=(f,ms)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>f(
 const loadFont=async f=>{try{await document.fonts.load(`28px "${f}"`)}catch(e){}};
 const bytesOf=async url=>new Uint8Array(await (await fetch(url)).arrayBuffer());
 
+/* on-screen diagnostics: shows the real error instead of failing silently */
+addEventListener('error',e=>toast('Script error: '+(e.message||'unknown')+(e.lineno?' (app.js line '+e.lineno+')':''),1));
+addEventListener('unhandledrejection',e=>toast('Error: '+((e.reason&&e.reason.message)||e.reason),1));
+{const miss=['pdfjsLib','PDFLib','fabric'].filter(n=>typeof window[n]==='undefined');
+ if(miss.length){const d=document.createElement('div');d.style.cssText='background:#b4232c;color:#fff;padding:10px;text-align:center;font-size:14px';
+  d.textContent='Could not load library: '+miss.join(', ')+'. Check your internet connection or disable ad-blockers for this site, then reload.';document.body.prepend(d)}}
+
 /* tabs */
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
