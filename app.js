@@ -86,7 +86,7 @@ g('hPdf').onclick=async()=>{busy(1);try{
 }catch(e){console.error(e);toast('PDF export failed: '+e.message,1)}busy(0)};
 
 /* ================= PDF & Image Editor ================= */
-pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc=window.PW_CDN?'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js':'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const E={type:'',pdf:null,bytes:null,imgEl:null,imgUrl:null,imgBytes:null,imgDims:null,n:0,cur:1,objs:{},sizes:{},z:1,tool:'select',hist:[],redo:[],busy:false};
 const fc=new fabric.Canvas('ec',{preserveObjectStacking:true,selection:true});
 let restoring=false;
@@ -175,7 +175,7 @@ g('eFile').addEventListener('change',async ev=>{
   const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name),isImg=/^image\/(png|jpeg|webp)$/.test(f.type);
   if(!isPdf&&!isImg)return toast('Unsupported file. Please choose a PDF, JPG, PNG or WEBP.',1);
   if(f.size>150*1024*1024)return toast('File is too large (limit 150 MB).',1);
-  busy(1);
+  toast('Opening '+f.name+'…');busy(1);
   try{
     const bytes=new Uint8Array(await f.arrayBuffer());
     if(isPdf){
